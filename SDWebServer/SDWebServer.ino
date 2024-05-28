@@ -1,3 +1,4 @@
+#include <FS.h> 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
@@ -8,13 +9,13 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define SCREEN_WIDTH 128 // display display width, in pixels
+#define SCREEN_HEIGHT 64 // display display height, in pixels
 
 // Declaration for SSD1306 display connected using I2C
-#define OLED_RESET     -1 // Reset pin
+#define display_RESET     -1 // Reset pin
 #define SCREEN_ADDRESS 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, display_RESET);
 
 //JioFi3_43B3C3
 //nk77k5jyrr
@@ -22,8 +23,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //76697555
 //TP-Link_F6EE
 
-const char* ssid = "POCO M2 Pro";
-const char* password = "12345678";
+//Redmi Note 7 Pro
+//123456789
+
+const char* ssid = "Redmi Note 7 Pro";
+const char* password = "123456789";
 const char* host = "esp8266sd";
 
 ESP8266WebServer server(80);
@@ -68,9 +72,32 @@ bool loadFromSdCard(String path){
 
   if (server.hasArg("download")) dataType = "application/octet-stream";
 
-  if (server.streamFile(dataFile, dataType) != dataFile.size()) {
+  
+const int MAX_RETRIES = 2;
+int retries = 0;
+size_t dataSent = 0;
+
+while (retries < MAX_RETRIES) {
+    dataSent = server.streamFile(dataFile, dataType);
+    if (dataSent == dataFile.size()) {
+        Serial.println("Data sent successfully.");
+        break;
+    } else {
+        Serial.println("Sent less data than expected, retrying...");
+        retries++;
+    }
+}
+
+if (retries == MAX_RETRIES) {
+    Serial.println("Failed to send the complete file after multiple attempts.");
+}
+
+  
+  /*if (server.streamFile(dataFile, dataType) != dataFile.size()) {
     Serial.println("Sent less data than expected!");
-  }
+  }*/
+
+
 
   dataFile.close();
   return true;
@@ -83,12 +110,39 @@ void handleFileUpload(){
     if(SD.exists((char *)upload.filename.c_str())) SD.remove((char *)upload.filename.c_str());
     uploadFile = SD.open(upload.filename.c_str(), FILE_WRITE);
     Serial.print("Upload: START, filename: "); Serial.println(upload.filename);
+    // Display and log the file upload start information
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Upload: START");
+    display.setCursor(0, 10);
+    display.print("Filename: ");
+    display.print(upload.filename);
+    display.display();
+
   } else if(upload.status == UPLOAD_FILE_WRITE){
     if(uploadFile) uploadFile.write(upload.buf, upload.currentSize);
     Serial.print("Upload: WRITE, Bytes: "); Serial.println(upload.currentSize);
+    // Display and log the file upload write information
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Upload: WRITE");
+    display.setCursor(0, 10);
+    display.print("Bytes: ");
+    display.print(upload.currentSize);
+    display.display();
   } else if(upload.status == UPLOAD_FILE_END){
     if(uploadFile) uploadFile.close();
     Serial.print("Upload: END, Size: "); Serial.println(upload.totalSize);
+    // Display and log the file upload end information
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Upload: END");
+    display.setCursor(0, 10);
+    display.print("Total Size: ");
+    display.print(upload.totalSize/1024);
+    display.print("KB");
+    display.display();
+    oled_dis();
   }
 }
 
@@ -189,6 +243,7 @@ void printDirectory() {
 }
 
 void handleNotFound(){
+  //Serial.println(hasSD);
   if(hasSD && loadFromSdCard(server.uri())) return;
   String message = "SDCARD Not Detected\n\n";
   message += "URI: ";
@@ -204,17 +259,24 @@ void handleNotFound(){
   server.send(404, "text/plain", message);
   Serial.print(message);
 }
-
+void oled_dis(){
+  delay(3000);
+  display.clearDisplay();
+  display.println("Connecting to... ");
+  display.println(ssid);
+  
+  display.println("IP address: ");
+  display.println(WiFi.localIP());
+  display.display(); 
+}
 void setup(void){
   Serial.begin(115200);
 
-// initialize the OLED object
+// initialize the display object
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println("OLED allocation failed");
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
     }
-  else{
-    Serial.println("OLED Connected");
-  }
 
     // Clear the buffer.
   display.clearDisplay();
@@ -272,9 +334,6 @@ void setup(void){
   if (SD.begin(SS)){
      Serial.println("SD Card initialized.");
      hasSD = true;
-  }
-  else{
-     Serial.println("SD Card not initialized.");
   }
 }
 
